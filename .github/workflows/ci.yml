@@ -19,35 +19,39 @@ jobs:
         with:
           python-version: 3.11
 
-      - name: Set up Docker Compose
-        run: |
-          sudo apt-get update
-          sudo apt-get install docker-compose -y
-
-      - name: Install test dependencies
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pytest httpx
+          pip install fastapi uvicorn pytest httpx
 
-      - name: Build and start containers
+      - name: Build and start Docker containers
         run: docker-compose up --build -d
 
-      - name: Wait for FastAPI to be ready
+      - name: List running Docker containers (debug)
+        run: docker ps
+
+      - name: Show FastAPI container logs (debug)
+        run: docker logs fastapi_app || echo "No logs available"
+
+      - name: Wait for FastAPI to be ready (with extended timeout)
         run: |
-          for i in {1..30}; do
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/docs)
+          for i in {1..60}; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/docs) || echo "curl failed"
             if [ "$STATUS" = "200" ]; then
               echo "✅ FastAPI is ready"
               break
             else
-              echo "🔁 Waiting for FastAPI... ($i/30) — Status: $STATUS"
+              echo "🔁 Waiting for FastAPI... ($i/60) — Status: $STATUS"
               sleep 2
             fi
           done
+          if [ "$STATUS" != "200" ]; then
+            echo "❌ FastAPI did not start properly within 120 seconds."
+            exit 1
+          fi
 
       - name: Run tests
-        run: |
-          pytest app/test_main.py
+        run: pytest app/test_main.py
 
-      - name: Cleanup containers
+      - name: Cleanup Docker containers
         run: docker-compose down
