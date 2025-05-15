@@ -25,15 +25,9 @@ jobs:
           pip install fastapi uvicorn pytest httpx
 
       - name: Build and start Docker containers
-        run: docker-compose up --build -d
+        run: docker compose up --build -d
 
-      - name: List running Docker containers (debug)
-        run: docker ps
-
-      - name: Show FastAPI container logs (debug)
-        run: docker logs fastapi_app || echo "No logs available"
-
-      - name: Wait for FastAPI to be ready (with extended timeout)
+      - name: Wait for FastAPI to be ready
         run: |
           for i in {1..60}; do
             STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/docs) || echo "curl failed"
@@ -46,12 +40,13 @@ jobs:
             fi
           done
           if [ "$STATUS" != "200" ]; then
-            echo "❌ FastAPI did not start properly within 120 seconds."
+            echo "❌ FastAPI did not start in time"
+            docker compose logs fastapi_app
             exit 1
           fi
 
       - name: Run tests
         run: pytest app/test_main.py
 
-      - name: Cleanup Docker containers
-        run: docker-compose down
+      - name: Cleanup
+        run: docker compose down

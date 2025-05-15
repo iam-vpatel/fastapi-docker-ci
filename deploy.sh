@@ -5,10 +5,10 @@ PORT=8000
 TEST_ENDPOINT="/docs"
 
 echo "🚀 Building Docker image..."
-docker-compose build
+docker compose build
 
 echo "📦 Starting containers..."
-docker-compose up -d
+docker compose up -d
 
 echo "⏳ Waiting for FastAPI to become available on http://localhost:$PORT$TEST_ENDPOINT..."
 
@@ -25,7 +25,7 @@ done
 
 if [ "$HTTP_STATUS" -ne 200 ]; then
     echo "❌ API did not start properly within 120 seconds."
-    docker-compose logs $APP_NAME
+    docker compose logs $APP_NAME
     exit 1
 fi
 
