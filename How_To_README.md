@@ -191,62 +191,69 @@ python_api/
         ✅ Validation: Implement validation for incoming data on creation and update endpoints.
 
 ```python
-from fastapi import FastAPI, HTTPException  # Import FastAPI framework and exception handler
-from app.schemas import Item  # Import the Item schema defined using Pydantic
+from fastapi import FastAPI, HTTPException  # FastAPI core framework
+from app.schemas import Item  # Use relative import inside package
 
-app = FastAPI()  # Initialize the FastAPI app
+app = FastAPI(title="Item API", version="1.0.0", description="A simple CRUD API for managing items")
 
-# In-memory dictionary to simulate database storage
-items = {}
+# Simulated in-memory "database"
+items_db = {}
 
 # ✅ Create Item
-@app.post("/items/", response_model=Item)
+@app.post("/items/", response_model=Item, status_code=201)
 def create_item(item: Item):
     """
     Creates a new item.
     Returns 400 if an item with the same ID already exists.
     """
-    if item.id in items:
-        raise HTTPException(status_code=400, detail="Item already exists")
-    items[item.id] = item
+    if item.id in items_db:
+        raise HTTPException(status_code=400, detail="Item already exists with this ID")
+    items_db[item.id] = item
     return item
 
-# ✅ Retrieve (Read) Item by ID
+# ✅ Retrieve Item
 @app.get("/items/{item_id}", response_model=Item)
 def get_item(item_id: int):
     """
     Retrieves an item by its ID.
-    Returns 404 if the item does not exist.
+    Returns 404 if not found.
     """
-    if item_id not in items:
+    item = items_db.get(item_id)
+    if item is None:
         raise HTTPException(status_code=404, detail="Item not found")
-    return items[item_id]
+    return item
 
-# ✅ Update Item by ID
+# ✅ Update Item
 @app.put("/items/{item_id}", response_model=Item)
 def update_item(item_id: int, updated_item: Item):
     """
-    Updates an existing item by ID.
-    Returns 404 if the item does not exist.
+    Updates an item by its ID.
+    Returns 404 if not found.
     """
-    if item_id not in items:
+    if item_id not in items_db:
         raise HTTPException(status_code=404, detail="Item not found")
-    items[item_id] = updated_item
+    items_db[item_id] = updated_item
     return updated_item
 
-# ✅ Delete Item by ID
-@app.delete("/items/{item_id}")
+# ✅ Delete Item
+@app.delete("/items/{item_id}", status_code=200)
 def delete_item(item_id: int):
     """
     Deletes an item by ID.
-    Returns 404 if the item does not exist.
+    Returns 404 if not found.
     """
-    if item_id not in items:
+    if item_id not in items_db:
         raise HTTPException(status_code=404, detail="Item not found")
-    del items[item_id]
-    return {"detail": "Item deleted"}  # ✅ Return consistent response structure
+    del items_db[item_id]
+    return {"detail": f"Item {item_id} deleted successfully"}
 
-
+# ✅ Health Check (Optional)
+@app.get("/")
+def read_root():
+    """
+    Root endpoint for health check or welcome message.
+    """
+    return {"message": "Welcome to the Item API. Visit /docs for Swagger UI."}
 ```
 
 ### app/schemas.py - Data Storage
@@ -255,19 +262,25 @@ def delete_item(item_id: int):
     ✅ Schema: Design a simple schema relevant to the managed resource.
 
 ```python
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
+from typing import Optional
 
 class Item(BaseModel):
+    """
+    Defines the structure and validation rules for an Item.
+    """
     id: int = Field(..., gt=0, description="ID must be greater than 0")
     name: str = Field(..., min_length=3, max_length=50, description="Name must be between 3 and 50 characters")
-    description: str = Field(default="", max_length=200, description="Optional description (max 200 chars)")
+    description: Optional[str] = Field(default=None, max_length=200, description="Optional description, max 200 characters")
 
-    @validator('name')
+    @field_validator("name")
     def name_must_not_be_blank(cls, v):
+        """
+        Ensures the name is not blank or whitespace.
+        """
         if not v.strip():
             raise ValueError("Name cannot be blank or just spaces")
         return v
-
 ```
 
 ## 📦 5. Install Requirements & Run
@@ -376,17 +389,17 @@ import os
 # Allow imports from parent directory so app can be loaded
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from fastapi.testclient import TestClient  # Import TestClient for API testing
-from app.main import app  # Import the FastAPI app
+from fastapi.testclient import TestClient
+from app.main import app
 
-client = TestClient(app)  # Create a test client instance
+client = TestClient(app)
 
 def test_create_item():
     """
     Test creating a new item.
     """
     response = client.post("/items/", json={"id": 1, "name": "Item1", "description": "A test item"})
-    assert response.status_code == 200
+    assert response.status_code == 201  # Created status
     assert response.json()["name"] == "Item1"
 
 def test_get_item():
@@ -429,7 +442,8 @@ def test_delete_item():
     """
     response = client.delete("/items/1")
     assert response.status_code == 200
-    assert response.json()["detail"] == "Item deleted"
+    # Your app returns: {"detail": "Item 1 deleted successfully"}
+    assert response.json()["detail"] == "Item 1 deleted successfully"
 
 def test_delete_item_404():
     """
@@ -438,7 +452,6 @@ def test_delete_item_404():
     response = client.delete("/items/999")
     assert response.status_code == 404
     assert response.json()["detail"] == "Item not found"
-
 ```
 
 Run:
@@ -475,18 +488,19 @@ FROM python:3.11-slim
 # Set working directory
 WORKDIR /app
 
-# Install dependencies
+# Copy requirements.txt first to leverage Docker cache
 COPY requirements.txt .
+
+# Install dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy app source code
 COPY ./app ./app
 
-# Expose port
+# Expose port 8000 for the FastAPI app
 EXPOSE 8000
 
-# Start the FastAPI app
-# The --reload flag enables live code reloading, ideal for development.
+# Start the FastAPI app with live reload (for development)
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
 ```
 
@@ -504,24 +518,20 @@ services:
   fastapi:
     build: .
     container_name: fastapi_app
+    working_dir: /app
     ports:
       - "8000:8000"
     volumes:
-      - ./app:/app # Live code reload
-      - db_data:/app/db # Mount for SQLite file persistence
-    depends_on:
-      - sqlite
+      - ./app:/app
+      - db_data:/app/db
     environment:
-      - DATABASE_URL=sqlite:///./db/database.db # I use DATABASE_URL=sqlite:///./db/database.db
-
-  # SQLite does not need a running DB container, but I create a dummy container sqlite.
-  # Just to keep the volume mount organized and simulate DB separation.
-  sqlite:
-    image: alpine
-    container_name: sqlite_dummy
-    volumes:
-      - db_data:/db # db_data volume ensures data persists between runs.
-    command: tail -f /dev/null # Dummy container to simulate DB persistence
+      - DATABASE_URL=sqlite:///./db/database.db
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/docs"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 volumes:
   db_data:
@@ -571,43 +581,39 @@ docker-compose down
 
 ```bash
 #!/bin/bash
-
 APP_NAME="fastapi_app"
 PORT=8000
 TEST_ENDPOINT="/docs"
 
 echo "🚀 Building Docker image..."
-docker-compose build
+docker compose build
 
 echo "📦 Starting containers..."
-docker-compose up -d
+docker compose up -d
 
 echo "⏳ Waiting for FastAPI to become available on http://localhost:$PORT$TEST_ENDPOINT..."
 
-# Wait until the FastAPI service is up (max 30 seconds)
-for i in {1..30}; do
-    HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:$PORT$TEST_ENDPOINT)
+for i in {1..60}; do
+    HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:$PORT$TEST_ENDPOINT) || echo "curl failed"
     if [ "$HTTP_STATUS" -eq 200 ]; then
         echo "✅ FastAPI is up and running!"
         break
     else
-        echo "🔁 Waiting... ($i/30)"
-        sleep 1
+        echo "🔁 Waiting... ($i/60) - Status: $HTTP_STATUS"
+        sleep 2
     fi
 done
 
 if [ "$HTTP_STATUS" -ne 200 ]; then
-    echo "❌ API did not start properly within 30 seconds."
-    docker-compose logs $APP_NAME
+    echo "❌ API did not start properly within 120 seconds."
+    docker compose logs $APP_NAME
     exit 1
 fi
 
-# Optional: Perform a test API call (replace with your actual endpoint)
 echo "🧪 Sending test GET request to root..."
 curl -s http://localhost:8000/
 
 echo -e "\n🎉 Deployment script completed successfully!"
-
 ```
 
 Save the script above as deploy.sh in your project root.
@@ -751,6 +757,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
+      - name: Set up Docker Compose
+        run: |
+          curl -L https://github.com/docker/compose/releases/download/1.29.2/docker-compose-$(uname -s)-$(uname -m) -o /usr/local/bin/docker-compose
+          chmod +x /usr/local/bin/docker-compose
+
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
@@ -769,17 +780,19 @@ jobs:
 
       - name: Wait for FastAPI to be ready
         run: |
-          for i in {1..30}; do
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/docs)
-            if [ "$STATUS" = "200" ]; then
-              echo "FastAPI is ready"
-              break
-            fi
-            sleep 2
+          for i in {1..60}; do
+              STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/docs) || echo "curl failed"
+              if [ "$STATUS" = "200" ]; then
+                  echo "✅ FastAPI is ready"
+                  break
+              else
+                  echo "🔁 Waiting for FastAPI... ($i/60) — Status: $STATUS"
+                  sleep 2
+              fi
           done
 
       - name: Run tests
-        run: pytest app/test_main.py
+        run: pytest
 
       - name: Cleanup
         run: docker-compose down
