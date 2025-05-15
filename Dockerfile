@@ -4,16 +4,18 @@ FROM python:3.11-slim
 # Set working directory
 WORKDIR /app
 
-# Install dependencies
+# Copy requirements.txt first to leverage Docker cache
 COPY requirements.txt .
+
+# Install dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy app source code
 COPY ./app ./app
 
-# Expose port
+# Expose port 8000 for the FastAPI app
 EXPOSE 8000
 
-# Start the FastAPI app 
-# The --reload flag enables live code reloading, ideal for development.
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"] 
+# Start the FastAPI app with live reload (for development)
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
