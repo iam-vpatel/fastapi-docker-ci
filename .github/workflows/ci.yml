@@ -19,34 +19,41 @@ jobs:
         with:
           python-version: 3.11
 
-      - name: Install dependencies
+      - name: Set up Docker Compose
+        run: |
+          sudo apt-get update
+          sudo apt-get install docker-compose -y
+
+      - name: Install test dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install fastapi uvicorn pytest httpx coverage
+          pip install pytest pytest-cov httpx
 
-      - name: Build Docker image
-        run: docker-compose build
+      - name: Build and start containers
+        run: docker-compose up --build -d
 
-      - name: Run Docker container
-        run: docker-compose up -d
-
-      - name: Wait for FastAPI container to be healthy
+      - name: Wait for FastAPI to be ready
         run: |
           for i in {1..30}; do
-            STATUS=$(docker inspect --format='{{.State.Health.Status}}' fastapi_app)
-            echo "Current container health: $STATUS"
-            if [ "$STATUS" == "healthy" ]; then
-              echo "FastAPI container is healthy."
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/docs)
+            if [ "$STATUS" = "200" ]; then
+              echo "✅ FastAPI is ready"
               break
+            else
+              echo "🔁 Waiting for FastAPI... ($i/30) — Status: $STATUS"
+              sleep 2
             fi
-            sleep 2
           done
 
       - name: Run tests with coverage
         run: |
-          docker exec fastapi_app coverage run -m pytest app/test_main.py
-          docker exec fastapi_app coverage report
-          docker exec fastapi_app coverage xml
+          pytest --cov=app app/test_main.py
 
-      - name: Cleanup
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v3
+        with:
+          name: coverage-report
+          path: htmlcov/  # generated if you run pytest with --cov-report=html
+
+      - name: Cleanup containers
         run: docker-compose down
