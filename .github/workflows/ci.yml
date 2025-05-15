@@ -25,10 +25,10 @@ jobs:
           pip install fastapi uvicorn pytest httpx
 
       - name: Build Docker image
-        run: docker-compose build
+        run: docker compose build
 
       - name: Run Docker container
-        run: docker-compose up -d
+        run: docker compose up -d
 
       - name: Wait for FastAPI to be ready
         run: |
@@ -45,4 +45,4 @@ jobs:
         run: pytest app/test_main.py
 
       - name: Cleanup
-        run: docker-compose down
+        run: docker compose down
