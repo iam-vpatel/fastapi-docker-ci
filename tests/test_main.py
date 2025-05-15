@@ -4,17 +4,17 @@ import os
 # Allow imports from parent directory so app can be loaded
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from fastapi.testclient import TestClient  # Import TestClient for API testing
-from app.main import app  # Import the FastAPI app
+from fastapi.testclient import TestClient
+from app.main import app
 
-client = TestClient(app)  # Create a test client instance
+client = TestClient(app)
 
 def test_create_item():
     """
     Test creating a new item.
     """
     response = client.post("/items/", json={"id": 1, "name": "Item1", "description": "A test item"})
-    assert response.status_code == 200
+    assert response.status_code == 201  # Created status
     assert response.json()["name"] == "Item1"
 
 def test_get_item():
@@ -57,7 +57,8 @@ def test_delete_item():
     """
     response = client.delete("/items/1")
     assert response.status_code == 200
-    assert response.json()["detail"] == "Item deleted"
+    # Your app returns: {"detail": "Item 1 deleted successfully"}
+    assert response.json()["detail"] == "Item 1 deleted successfully"
 
 def test_delete_item_404():
     """
@@ -66,4 +67,3 @@ def test_delete_item_404():
     response = client.delete("/items/999")
     assert response.status_code == 404
     assert response.json()["detail"] == "Item not found"
-

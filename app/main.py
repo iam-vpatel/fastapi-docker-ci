@@ -1,5 +1,5 @@
 from fastapi import FastAPI, HTTPException  # FastAPI core framework
-from schemas import Item  # Pydantic schema for data validation
+from app.schemas import Item  # Use relative import inside package
 
 app = FastAPI(title="Item API", version="1.0.0", description="A simple CRUD API for managing items")
 
@@ -61,3 +61,4 @@ def read_root():
     Root endpoint for health check or welcome message.
     """
     return {"message": "Welcome to the Item API. Visit /docs for Swagger UI."}
+
